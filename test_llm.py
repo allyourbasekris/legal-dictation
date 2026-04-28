@@ -1,7 +1,7 @@
 """Test just the LLM correction/formatting without re-transcribing.
 
 Usage:
-  python test_llm.py "C:\path\to\transcript.txt"           # from file
+  python test_llm.py "path/to/transcript.txt"           # from file
   python test_llm.py --correct "Some text to correct"       # inline
   python test_llm.py --format "Some text to format"         # inline
   python test_llm.py "transcript.txt" --all                 # both passes

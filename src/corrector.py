@@ -27,13 +27,14 @@ def _build_prompt(system, user_text):
 
 def _strip_output(text):
     """Strip prompt echo, banner, and trailing stats, keep only generated text."""
-    # Find the assistant token — generation starts after this
+    # Find the LAST assistant token — the model's generation starts after this.
+    # The first occurrence is in the echoed prompt; the last is the actual generation.
     marker = "<|im_start|>assistant"
-    idx = text.find(marker)
+    idx = text.rfind(marker)
     if idx != -1:
         text = text[idx + len(marker):]
 
-    # Strip leading whitespace/punctuation (like "> " or "\n")
+    # Strip leading whitespace/punctuation
     text = text.lstrip("\n\r> \t")
 
     # Strip trailing metadata and special tokens
