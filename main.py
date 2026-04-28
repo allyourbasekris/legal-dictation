@@ -126,12 +126,11 @@ class LegalDictationApp:
         widget.insert("1.0", text)
         widget.config(state=tk.DISABLED)
 
-    def _append_formatted(self, text):
-        w = self.formatted_text_widget
-        w.config(state=tk.NORMAL)
-        w.insert(tk.END, text)
-        w.see(tk.END)
-        w.config(state=tk.DISABLED)
+    def _append_text(self, widget, text):
+        widget.config(state=tk.NORMAL)
+        widget.insert(tk.END, text)
+        widget.see(tk.END)
+        widget.config(state=tk.DISABLED)
 
     def _copy_text(self, widget):
         text = widget.get("1.0", tk.END).strip()
@@ -174,14 +173,13 @@ class LegalDictationApp:
             self.root.after(0, lambda: self.status_var.set("Transcribing..."))
             transcriber = Transcriber()
 
-            self.root.after(0, lambda: self._set_text(self.formatted_text_widget, ""))
-            self._append_formatted("=== TRANSCRIPTION (streaming) ===\n\n")
+            self.root.after(0, lambda: self._set_text(self.raw_text_widget, ""))
 
             raw = ""
             def on_segment(text):
                 nonlocal raw
                 raw += text + " "
-                self.root.after(0, lambda t=text: self._append_formatted(t + " "))
+                self.root.after(0, lambda t=text: self._append_text(self.raw_text_widget, t + " "))
 
             full_raw, lang, prob = transcriber.transcribe(wav_path, on_segment=on_segment)
             raw = full_raw
@@ -199,14 +197,14 @@ class LegalDictationApp:
             self.raw_text = raw
             self.root.after(0, lambda: self._set_text(self.raw_text_widget, raw))
 
-            self.root.after(0, lambda: self._append_formatted("\n\n=== GRAMMAR CORRECTION ===\n\n"))
+            self.root.after(0, lambda: self._set_text(self.formatted_text_widget, "=== GRAMMAR CORRECTION ===\n\n"))
             self.root.after(0, lambda: self.status_var.set("Correcting grammar..."))
-            corrected = corrector.correct_text(raw, on_token=lambda t: self.root.after(0, lambda: self._append_formatted(t)))
+            corrected = corrector.correct_text(raw, on_token=lambda t: self.root.after(0, lambda: self._append_text(self.formatted_text_widget, t)))
             self.corrected_text = corrected
 
-            self.root.after(0, lambda: self._append_formatted("\n\n=== FORMATTING ===\n\n"))
+            self.root.after(0, lambda: self._append_text(self.formatted_text_widget, "\n\n=== FORMATTING ===\n\n"))
             self.root.after(0, lambda: self.status_var.set("Formatting document..."))
-            formatted = corrector.format_text(corrected, on_token=lambda t: self.root.after(0, lambda: self._append_formatted(t)))
+            formatted = corrector.format_text(corrected, on_token=lambda t: self.root.after(0, lambda: self._append_text(self.formatted_text_widget, t)))
             self.formatted_text = formatted
 
             self.root.after(0, lambda: self._set_text(self.formatted_text_widget, self.formatted_text))
