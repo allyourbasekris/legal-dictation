@@ -21,10 +21,12 @@ def parse_sections(text):
 
     for line in text.split("\n"):
         stripped = line.strip()
-        if stripped in SECTION_HEADERS or stripped.upper().startswith("==="):
+        # Normalize "### === HEADER ===" to "=== HEADER ==="
+        normalized = stripped.lstrip("# ")
+        if normalized in SECTION_HEADERS:
             if current_lines:
                 sections[current_header] = "\n".join(current_lines).strip()
-            current_header = stripped.strip("= ")
+            current_header = normalized.strip("= ")
             current_lines = []
         else:
             current_lines.append(line)

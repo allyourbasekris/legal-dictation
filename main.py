@@ -13,9 +13,8 @@ from datetime import datetime
 
 from src.transcriber import Transcriber
 from src import corrector
-from src.downloader import _download_progress
 from src.formatter import build_docx, save_docx
-from src.config import OUTPUT_DIR, LLAMA_MODEL_PATH, LLAMA_BINARY_PATH
+from src.config import OUTPUT_DIR
 
 
 class LegalDictationApp:
@@ -87,28 +86,8 @@ class LegalDictationApp:
         self.root.bind("<Control-s>", lambda e: self._save_docx())
 
     def _check_models(self):
-        self.start_btn.config(state=tk.DISABLED)
-        if not LLAMA_BINARY_PATH.exists():
-            self.status_var.set(f"llama-cli not found. Run setup.bat to download it.")
-            return
-        if not LLAMA_MODEL_PATH.exists():
-            self.status_var.set("Downloading LLM model (1 GB) on first use...")
-            threading.Thread(target=self._download_llm, daemon=True).start()
-        else:
-            self.status_var.set("Ready")
-
-    def _download_llm(self):
-        try:
-            _download_progress(
-                "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
-                LLAMA_MODEL_PATH,
-                callback=lambda p: self.root.after(0, lambda: self.status_var.set(f"Downloading LLM: {p:.0%}"))
-            )
-            self.root.after(0, lambda: self.status_var.set("Ready"))
-            self.root.after(0, lambda: self.start_btn.config(state=tk.NORMAL if self.audio_path else tk.DISABLED))
-        except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("Download Error", f"Failed to download LLM model:\n{e}"))
-            self.root.after(0, lambda: self.status_var.set("Download failed"))
+        self.status_var.set("Ready")
+        self.start_btn.config(state=tk.NORMAL if self.audio_path else tk.DISABLED)
 
     def _browse_file(self):
         path = filedialog.askopenfilename(
@@ -197,17 +176,11 @@ class LegalDictationApp:
             self.raw_text = raw
             self.root.after(0, lambda: self._set_text(self.raw_text_widget, raw))
 
-            self.root.after(0, lambda: self._set_text(self.formatted_text_widget, "=== GRAMMAR CORRECTION ===\n\n"))
-            self.root.after(0, lambda: self.status_var.set("Correcting grammar..."))
-            corrected = corrector.correct_text(raw)
+            self.root.after(0, lambda: self.status_var.set("Processing punctuation & formatting..."))
+            corrected, formatted = corrector.process(raw)
             self.corrected_text = corrected
-            self.root.after(0, lambda: self._append_text(self.formatted_text_widget, corrected + "\n\n"))
-
-            self.root.after(0, lambda: self.status_var.set("Formatting document..."))
-            formatted = corrector.format_text(corrected)
             self.formatted_text = formatted
-            self.root.after(0, lambda: self._append_text(self.formatted_text_widget, "=== FORMATTING ===\n\n" + formatted))
-
+            self.root.after(0, lambda: self._set_text(self.formatted_text_widget, formatted))
             self.doc = build_docx(raw, corrected, formatted, self.audio_path)
 
             self.root.after(0, lambda: self.status_var.set("Complete"))

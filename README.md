@@ -1,21 +1,21 @@
 # Legal Dictation Tool
 
-Offline legal transcription with grammar correction and document formatting, powered by Whisper + LLM. CPU-only, no GPU required.
+Offline legal transcription with punctuation correction and section formatting. CPU-only, no GPU, no LLM required.
 
 ## Features
 
-- Transcribe audio files (mp3, wav, m4a, etc.) using faster-whisper
-- Grammar and spell check via local LLM (Qwen2.5-1.5B, ~1 GB GGUF)
-- Auto-classifies dictation into sections: FILE NOTES, TIME RECORDING, CORRESPONDENCE, ACTION ITEMS
+- Transcribe audio files (mp3, wav, m4a, etc.) using faster-whisper (small.en, ~466 MB)
+- Punctuation, capitalization, and sentence splitting via pysbd
+- Auto-detects dictation sections: FILE NOTES, TIME RECORDING, CORRESPONDENCE, ACTION ITEMS
 - Outputs formatted .docx documents
-- Fully offline after first-run model download (~1.5 GB total)
-- Uses llama.cpp binary — no C++ compiler or `llama-cpp-python` needed
+- Fully offline after first-run model download (~466 MB)
+- Fast: no LLM inference, processing completes in seconds
 
 ## Requirements
 
 - Python 3.10+
-- ~4 GB RAM
-- ~2 GB free disk for models
+- ~2 GB RAM
+- ~500 MB free disk (Whisper model)
 - ffmpeg (for non-WAV audio files)
 
 ## Quick Start
@@ -31,7 +31,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Models download automatically on first run (~1.5 GB total). Select an audio file, click "Transcribe & Format", and save the result as .docx.
+The Whisper model downloads automatically on first run (~466 MB). Select an audio file, click "Transcribe & Format", and save the result as .docx.
 
 ## Keyboard Shortcuts
 

@@ -48,35 +48,10 @@ echo Installing Python dependencies...
 pip install -r requirements.txt
 if %errorlevel% neq 0 goto install_deps_fail
 echo Python dependencies installed.
-goto check_llama
+goto launch
 
 :install_deps_fail
 echo pip install failed.
-pause
-exit /b 1
-
-:check_llama
-set CACHE_DIR=%USERPROFILE%\.cache\legal-dictation
-if not exist "%CACHE_DIR%" mkdir "%CACHE_DIR%"
-if exist "%CACHE_DIR%\llama-cli.exe" goto launch
-echo Downloading llama-cli binary (~16 MB)...
-curl -L -o "%CACHE_DIR%\llama.zip" "https://github.com/ggml-org/llama.cpp/releases/download/b8953/llama-b8953-bin-win-cpu-x64.zip" --progress-bar
-if %errorlevel% neq 0 goto download_llama_fail
-echo Extracting...
-python extract_llama.py "%CACHE_DIR%\llama.zip" "%CACHE_DIR%"
-if %errorlevel% neq 0 goto extract_llama_fail
-if exist "%CACHE_DIR%\llama.zip" del "%CACHE_DIR%\llama.zip" >nul
-if not exist "%CACHE_DIR%\llama-cli.exe" goto extract_llama_fail
-echo llama-cli ready.
-goto launch
-
-:download_llama_fail
-echo Download failed. Check your internet connection.
-pause
-exit /b 1
-
-:extract_llama_fail
-echo Could not find llama-cli.exe in the archive.
 pause
 exit /b 1
 
