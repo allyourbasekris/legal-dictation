@@ -199,15 +199,14 @@ class LegalDictationApp:
 
             self.root.after(0, lambda: self._set_text(self.formatted_text_widget, "=== GRAMMAR CORRECTION ===\n\n"))
             self.root.after(0, lambda: self.status_var.set("Correcting grammar..."))
-            corrected = corrector.correct_text(raw, on_token=lambda t: self.root.after(0, lambda: self._append_text(self.formatted_text_widget, t)))
+            corrected = corrector.correct_text(raw)
             self.corrected_text = corrected
+            self.root.after(0, lambda: self._append_text(self.formatted_text_widget, corrected + "\n\n"))
 
-            self.root.after(0, lambda: self._append_text(self.formatted_text_widget, "\n\n=== FORMATTING ===\n\n"))
             self.root.after(0, lambda: self.status_var.set("Formatting document..."))
-            formatted = corrector.format_text(corrected, on_token=lambda t: self.root.after(0, lambda: self._append_text(self.formatted_text_widget, t)))
+            formatted = corrector.format_text(corrected)
             self.formatted_text = formatted
-
-            self.root.after(0, lambda: self._set_text(self.formatted_text_widget, self.formatted_text))
+            self.root.after(0, lambda: self._append_text(self.formatted_text_widget, "=== FORMATTING ===\n\n" + formatted))
 
             self.doc = build_docx(raw, corrected, formatted, self.audio_path)
 
