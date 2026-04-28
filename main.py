@@ -126,6 +126,13 @@ class LegalDictationApp:
         widget.insert("1.0", text)
         widget.config(state=tk.DISABLED)
 
+    def _append_formatted(self, text):
+        w = self.formatted_text_widget
+        w.config(state=tk.NORMAL)
+        w.insert(tk.END, text)
+        w.see(tk.END)
+        w.config(state=tk.DISABLED)
+
     def _copy_text(self, widget):
         text = widget.get("1.0", tk.END).strip()
         if text:
@@ -166,7 +173,18 @@ class LegalDictationApp:
 
             self.root.after(0, lambda: self.status_var.set("Transcribing..."))
             transcriber = Transcriber()
-            raw, lang, prob = transcriber.transcribe(wav_path)
+
+            self.root.after(0, lambda: self._set_text(self.formatted_text_widget, ""))
+            self._append_formatted("=== TRANSCRIPTION (streaming) ===\n\n")
+
+            raw = ""
+            def on_segment(text):
+                nonlocal raw
+                raw += text + " "
+                self.root.after(0, lambda t=text: self._append_formatted(t + " "))
+
+            full_raw, lang, prob = transcriber.transcribe(wav_path, on_segment=on_segment)
+            raw = full_raw
 
             if cleanup:
                 try:
@@ -181,15 +199,17 @@ class LegalDictationApp:
             self.raw_text = raw
             self.root.after(0, lambda: self._set_text(self.raw_text_widget, raw))
 
+            self.root.after(0, lambda: self._append_formatted("\n\n=== GRAMMAR CORRECTION ===\n\n"))
             self.root.after(0, lambda: self.status_var.set("Correcting grammar..."))
-            corrected = corrector.correct_text(raw)
+            corrected = corrector.correct_text(raw, on_token=lambda t: self.root.after(0, lambda: self._append_formatted(t)))
             self.corrected_text = corrected
 
+            self.root.after(0, lambda: self._append_formatted("\n\n=== FORMATTING ===\n\n"))
             self.root.after(0, lambda: self.status_var.set("Formatting document..."))
-            formatted = corrector.format_text(corrected)
+            formatted = corrector.format_text(corrected, on_token=lambda t: self.root.after(0, lambda: self._append_formatted(t)))
             self.formatted_text = formatted
 
-            self.root.after(0, lambda: self._set_text(self.formatted_text_widget, formatted))
+            self.root.after(0, lambda: self._set_text(self.formatted_text_widget, self.formatted_text))
 
             self.doc = build_docx(raw, corrected, formatted, self.audio_path)
 

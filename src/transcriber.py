@@ -21,16 +21,16 @@ class Transcriber:
             )
         return self._model
 
-    def transcribe(self, audio_path, on_progress=None):
+    def transcribe(self, audio_path, on_segment=None):
         segments, info = self.model.transcribe(audio_path, beam_size=5, word_timestamps=False)
         lang = info.language
         prob = info.language_probability
 
         text_parts = []
-        for i, seg in enumerate(segments):
+        for seg in segments:
             text_parts.append(seg.text.strip())
-            if on_progress:
-                on_progress(seg.end, info.duration)
+            if on_segment:
+                on_segment(seg.text.strip())
 
         full = " ".join(text_parts)
         return full.strip(), lang, prob
