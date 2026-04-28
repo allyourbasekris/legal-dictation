@@ -2,21 +2,38 @@
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
-:: Check Python
+:: Check / Install Python via winget
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo Python not found. Install Python 3.10+ from https://python.org
+    echo Python not found. Attempting auto-install via winget...
+    winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
+    if !errorlevel! neq 0 (
+        echo.
+        echo Auto-install failed. Install Python 3.10+ manually from https://python.org
+        echo Make sure to check "Add Python to PATH" during installation.
+        pause
+        exit /b 1
+    )
+    echo.
+    echo Python installed. Restart this script to pick up PATH changes.
     pause
-    exit /b 1
+    exit /b 0
 )
 
-:: Check ffmpeg
+:: Check / Install ffmpeg via winget
 where ffmpeg >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ffmpeg not found. Install from https://ffmpeg.org or via winget:
-    echo   winget install ffmpeg
+    echo ffmpeg not found. Attempting auto-install via winget...
+    winget install -e --id Gyan.FFmpeg --accept-source-agreements --accept-package-agreements
+    if !errorlevel! neq 0 (
+        echo Auto-install failed. Install ffmpeg manually from https://ffmpeg.org
+        pause
+        exit /b 1
+    )
+    echo.
+    echo ffmpeg installed. Restart this script to pick up PATH changes.
     pause
-    exit /b 1
+    exit /b 0
 )
 
 :: Create venv if missing
