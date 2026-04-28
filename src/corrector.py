@@ -1,5 +1,7 @@
 import os
 import subprocess
+import tempfile
+from pathlib import Path
 from src.config import LLAMA_BINARY_PATH, LLAMA_MODEL_PATH
 
 QWEN_SYSTEM = (
@@ -35,19 +37,40 @@ def llama_complete(prompt, max_tokens=1024, temperature=0.1):
     if not os.path.exists(model):
         raise RuntimeError(f"Model not found at {model}.")
 
+    import logging
+    log = logging.getLogger("legal-dictation")
+    log.info(f"LLM input prompt length: {len(prompt)} chars, max_tokens={max_tokens}")
+
+    # Write prompt to file to avoid shell quoting issues
+    import tempfile
+    import uuid
+    prompt_file = Path(tempfile.gettempdir()) / f"llama_prompt_{uuid.uuid4().hex}.txt"
+    prompt_file.write_text(prompt, encoding="utf-8")
+
     cmd = [
-        binary, "-m", model, "-p", prompt,
+        binary, "-m", model,
+        "--prompt-file", str(prompt_file),
         "-n", str(max_tokens), "--temp", str(temperature),
         "--no-display-prompt", "-c", "4096",
         "--threads", str(os.cpu_count() or 4),
     ]
 
+    log.info(f"Running: {binary}")
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
 
+    # Cleanup prompt file
+    try:
+        prompt_file.unlink()
+    except OSError:
+        pass
+
     if result.returncode != 0:
-        raise RuntimeError(f"llama-cli error: {result.stderr.strip()[:500]}")
+        err = result.stderr.strip()[:500]
+        log.error(f"llama-cli stderr: {err}")
+        raise RuntimeError(f"llama-cli error: {err}")
 
     full = result.stdout
+    log.info(f"LLM output length: {len(full)} chars")
 
     for token in ["<|im_end|>", "<|endoftext|>"]:
         if full.rstrip().endswith(token):
@@ -56,16 +79,10 @@ def llama_complete(prompt, max_tokens=1024, temperature=0.1):
 
 
 def correct_text(text):
-    return llama_complete(
-        _build_prompt(QWEN_SYSTEM, f"Correct this text:\n\n{text}"),
-        max_tokens=len(text) + 256,
-        temperature=0.1,
-    )
+    prompt = _build_prompt(QWEN_SYSTEM, f"Correct this text:\n\n{text}")
+    return llama_complete(prompt, max_tokens=len(text) + 256, temperature=0.1)
 
 
 def format_text(text):
-    return llama_complete(
-        _build_prompt(QWEN_FORMAT_SYSTEM, f"Format into sections:\n\n{text}"),
-        max_tokens=len(text) + 512,
-        temperature=0.2,
-    )
+    prompt = _build_prompt(QWEN_FORMAT_SYSTEM, f"Format into sections:\n\n{text}")
+    return llama_complete(prompt, max_tokens=len(text) + 512, temperature=0.2)
