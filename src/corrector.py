@@ -27,19 +27,22 @@ def _build_prompt(system, user_text):
 
 
 def _strip_output(text):
-    """Strip banner, prompt echo, and trailing stats, keep only generated text."""
-    lines = text.splitlines(keepends=True)
-    last_prompt_line = -1
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped == ">" or stripped.startswith("> "):
-            last_prompt_line = i
-    if last_prompt_line >= 0 and last_prompt_line < len(lines) - 1:
-        text = "".join(lines[last_prompt_line + 1:])
+    # Find the last prompt marker
+    idx = text.rfind("\n> ")
+    if idx >= 0:
+        text = text[idx + 3:]
+
+    # Find the last assistant marker (generation starts here)
+    asst = text.rfind("<|im_start|>assistant")
+    if asst >= 0:
+        text = text[asst + len("<|im_start|>assistant"):]
+
+    # Strip ANSI escape codes (colors)
+    text = re.sub(r'\x1b\[[0-9;]*m', '', text)
+    # Strip trailing metadata
     text = re.sub(r'\n\[ Prompt: .*', '', text)
     text = re.sub(r'\ncommon_memory_breakdown.*', '', text)
     text = re.sub(r'\nExiting\.\.\..*', '', text)
-    text = re.sub(r'\n\[.*memory breakdown.*', '', text)
     text = re.sub(r'<\|im_end\|>\s*$', '', text)
     text = re.sub(r'<\|endoftext\|>\s*$', '', text)
     return text.strip()
