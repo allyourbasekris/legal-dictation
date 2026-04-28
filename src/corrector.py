@@ -1,4 +1,5 @@
-import os, subprocess, logging, re
+import os, subprocess, logging, re, tempfile, uuid
+from pathlib import Path
 from src.config import LLAMA_BINARY_PATH, LLAMA_MODEL_PATH
 
 QWEN_SYSTEM = (
@@ -26,25 +27,21 @@ def _build_prompt(system, user_text):
 
 
 def _strip_output(text):
-    """Strip prompt echo, banner, and trailing stats, keep only generated text."""
-    # Find the LAST assistant token — the model's generation starts after this.
-    # The first occurrence is in the echoed prompt; the last is the actual generation.
-    marker = "<|im_start|>assistant"
-    idx = text.rfind(marker)
-    if idx != -1:
-        text = text[idx + len(marker):]
-
-    # Strip leading whitespace/punctuation
-    text = text.lstrip("\n\r> \t")
-
-    # Strip trailing metadata and special tokens
+    """Strip banner, prompt echo, and trailing stats, keep only generated text."""
+    lines = text.splitlines(keepends=True)
+    last_prompt_line = -1
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == ">" or stripped.startswith("> "):
+            last_prompt_line = i
+    if last_prompt_line >= 0 and last_prompt_line < len(lines) - 1:
+        text = "".join(lines[last_prompt_line + 1:])
     text = re.sub(r'\n\[ Prompt: .*', '', text)
     text = re.sub(r'\ncommon_memory_breakdown.*', '', text)
     text = re.sub(r'\nExiting\.\.\..*', '', text)
     text = re.sub(r'\n\[.*memory breakdown.*', '', text)
     text = re.sub(r'<\|im_end\|>\s*$', '', text)
     text = re.sub(r'<\|endoftext\|>\s*$', '', text)
-
     return text.strip()
 
 
@@ -60,24 +57,44 @@ def llama_complete(prompt, max_tokens=1024, temperature=0.1):
     log = logging.getLogger("legal-dictation")
     log.info(f"LLM input prompt len={len(prompt)} max_tokens={max_tokens}")
 
-    # subprocess.run with a list passes args via CreateProcess directly,
-    # bypassing cmd.exe, so -p with special chars works fine.
+    # Write prompt and output to files to avoid pipe buffer deadlock
+    uid = uuid.uuid4().hex[:8]
+    tmp = Path(tempfile.gettempdir())
+    prompt_file = tmp / f"llama_in_{uid}.txt"
+    out_file = tmp / f"llama_out_{uid}.txt"
+
+    prompt_file.write_text(prompt, encoding="utf-8")
+
     cmd = [
         binary, "-m", model,
-        "-p", prompt,
+        "-f", str(prompt_file),
         "-n", str(max_tokens), "--temp", str(temperature),
         "--no-display-prompt", "--single-turn",
         "-c", "4096",
         "--threads", str(os.cpu_count() or 4),
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
+    # Write stdout directly to file and stderr to null to avoid pipe buffering issues
+    with open(out_file, "w", encoding="utf-8") as fout:
+        with open(os.devnull, "w") as ferr:
+            result = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=fout, stderr=ferr, timeout=1200)
+
+    try:
+        prompt_file.unlink()
+    except OSError:
+        pass
 
     if result.returncode != 0:
-        raise RuntimeError(f"llama-cli error: {result.stderr.strip()[:500]}")
+        raise RuntimeError(f"llama-cli returned code {result.returncode}")
 
-    log.info(f"Raw stdout: {len(result.stdout)} chars")
-    full = _strip_output(result.stdout)
+    full = out_file.read_text(encoding="utf-8")
+    try:
+        out_file.unlink()
+    except OSError:
+        pass
+
+    log.info(f"Raw stdout: {len(full)} chars")
+    full = _strip_output(full)
     log.info(f"Stripped: {len(full)} chars")
     return full
 
