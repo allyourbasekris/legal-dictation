@@ -43,7 +43,7 @@ def llama_complete(prompt, max_tokens=1024, temperature=0.1):
 
     cmd = [
         binary, "-m", model,
-        "--prompt-file", str(prompt_file),
+        "-f", str(prompt_file),
         "-n", str(max_tokens), "--temp", str(temperature),
         "--no-display-prompt", "-c", "4096",
         "--threads", str(os.cpu_count() or 4),
