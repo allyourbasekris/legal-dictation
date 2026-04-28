@@ -26,24 +26,23 @@ def _build_prompt(system, user_text):
 
 
 def _strip_output(text):
-    """Strip llama-cli banner, prompt echo, and trailing stats from output."""
-    # Split on "> " which is the interactive prompt marker.
-    # Output before last "> " is banner + prompt echo.
-    # Output after last "> " is generated text + trailing stats.
-    parts = text.split("> ")
-    if len(parts) > 1:
-        text = parts[-1]
+    """Strip prompt echo, banner, and trailing stats, keep only generated text."""
+    # Find the assistant token — generation starts after this
+    marker = "<|im_start|>assistant"
+    idx = text.find(marker)
+    if idx != -1:
+        text = text[idx + len(marker):]
 
-    # Strip trailing metadata lines
+    # Strip leading whitespace/punctuation (like "> " or "\n")
+    text = text.lstrip("\n\r> \t")
+
+    # Strip trailing metadata and special tokens
     text = re.sub(r'\n\[ Prompt: .*', '', text)
     text = re.sub(r'\ncommon_memory_breakdown.*', '', text)
     text = re.sub(r'\nExiting\.\.\..*', '', text)
     text = re.sub(r'\n\[.*memory breakdown.*', '', text)
-
-    # Strip special tokens
-    for token in ["<|im_end|>", "<|endoftext|>"]:
-        if text.rstrip().endswith(token):
-            text = text[: -len(token)].rstrip()
+    text = re.sub(r'<\|im_end\|>\s*$', '', text)
+    text = re.sub(r'<\|endoftext\|>\s*$', '', text)
 
     return text.strip()
 
