@@ -9,6 +9,7 @@ Offline legal transcription with grammar correction and document formatting, pow
 - Auto-classifies dictation into sections: FILE NOTES, TIME RECORDING, CORRESPONDENCE, ACTION ITEMS
 - Outputs formatted .docx documents
 - Fully offline after first-run model download (~1.5 GB total)
+- Uses llama.cpp binary — no C++ compiler or `llama-cpp-python` needed
 
 ## Requirements
 

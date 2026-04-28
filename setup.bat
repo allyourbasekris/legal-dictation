@@ -49,21 +49,47 @@ if not exist "venv\Scripts\python.exe" (
     echo Virtual environment found.
 )
 
-:: Activate and install
+:: Activate and install Python deps
 call venv\Scripts\activate.bat
 
-echo Installing dependencies (first run downloads ~1.5 GB of models)...
+echo Installing Python dependencies...
 pip install -r requirements.txt
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     echo pip install failed
     pause
     exit /b 1
 )
 
+:: Check for llama-cli binary
+set "CACHE_DIR=%USERPROFILE%\.cache\legal-dictation"
+if not exist "%CACHE_DIR%" mkdir "%CACHE_DIR%"
+if not exist "%CACHE_DIR%\llama-cli.exe" (
+    echo.
+    echo Downloading llama-cli (llama.cpp binary, ~30 MB)...
+    set "ZIP_URL=https://github.com/ggml-org/llama.cpp/releases/download/b4822/llama-b4822-bin-win-cuda-cu12.6-x64.zip"
+    set "ZIP_FILE=%CACHE_DIR%\llama.zip"
+    curl -L -o "!ZIP_FILE!" "!ZIP_URL!" --progress-bar
+    if !errorlevel! neq 0 (
+        echo Failed to download llama-cli. Check your internet connection.
+        pause
+        exit /b 1
+    )
+    echo Extracting llama-cli.exe...
+    powershell -Command "Expand-Archive -Path '!ZIP_FILE!' -DestinationPath '!CACHE_DIR!\llama_extract' -Force" >nul 2>&1
+    :: Find and move llama-cli.exe to the cache root
+    for /r "!CACHE_DIR!\llama_extract" %%f in (llama-cli.exe) do (
+        move /Y "%%f" "!CACHE_DIR!\llama-cli.exe" >nul 2>&1
+    )
+    :: Cleanup
+    if exist "!CACHE_DIR!\llama_extract" rmdir /S /Q "!CACHE_DIR!\llama_extract" >nul 2>&1
+    del "!ZIP_FILE!" >nul 2>&1
+    echo llama-cli ready.
+)
+
 echo.
 echo Setup complete. Launching...
 python main.py
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     echo.
     echo Application exited with error. Press any key to close.
     pause

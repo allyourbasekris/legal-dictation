@@ -1,69 +1,43 @@
 import os
-import requests
-from pathlib import Path
-from src.config import LLAMA_PATH, LLAMA_HF_URL
-
-_MODEL_INSTANCE = None
+import subprocess
+from src.config import LLAMA_BINARY_PATH, LLAMA_MODEL_PATH
 
 
-def _download_progress(url, dest, callback=None):
-    dest = Path(dest)
-    if dest.exists():
-        if callback:
-            callback(1.0)
-        return
-    tmp = dest.with_suffix(".part")
-    resp = requests.get(url, stream=True, timeout=30)
-    resp.raise_for_status()
-    total = int(resp.headers.get("content-length", 0))
-    downloaded = 0
-    with open(tmp, "wb") as f:
-        for chunk in resp.iter_content(chunk_size=8192):
-            f.write(chunk)
-            downloaded += len(chunk)
-            if callback and total:
-                callback(downloaded / total)
-    tmp.rename(dest)
+def llama_complete(prompt, max_tokens=1024, temperature=0.1):
+    binary = str(LLAMA_BINARY_PATH)
+    model = str(LLAMA_MODEL_PATH)
 
+    if not os.path.exists(binary):
+        raise RuntimeError(f"llama-cli not found at {binary}. Run setup.bat to download it.")
+    if not os.path.exists(model):
+        raise RuntimeError(f"Model not found at {model}. It will be downloaded on first run.")
 
-def download_model(callback=None):
-    _download_progress(LLAMA_HF_URL, LLAMA_PATH, callback)
-    return LLAMA_PATH
+    cmd = [
+        binary, "-m", model, "-p", prompt,
+        "-n", str(max_tokens), "--temp", str(temperature),
+        "--no-display-prompt", "-c", "4096",
+        "--threads", str(os.cpu_count() or 4),
+    ]
 
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
-def load_model(n_ctx=4096, n_threads=None):
-    global _MODEL_INSTANCE
-    if _MODEL_INSTANCE is not None:
-        return _MODEL_INSTANCE
-    from llama_cpp import Llama
-    _MODEL_INSTANCE = Llama(
-        model_path=str(LLAMA_PATH),
-        n_ctx=n_ctx,
-        n_threads=n_threads or os.cpu_count() or 4,
-        verbose=False,
-    )
-    return _MODEL_INSTANCE
+    if result.returncode != 0:
+        raise RuntimeError(f"llama-cli error: {result.stderr.strip()}")
 
-
-def unload_model():
-    global _MODEL_INSTANCE
-    _MODEL_INSTANCE = None
+    return result.stdout.strip()
 
 
 def correct_text(text):
-    llm = load_model()
     prompt = (
         "You are a legal text proofreading assistant. Fix grammar, spelling, and punctuation. "
         "Preserve all names, dates, case numbers, and legal terminology exactly. "
         "Output only the corrected text.\n\n"
         f"{text}"
     )
-    result = llm.create_completion(prompt, max_tokens=len(text) + 256, temperature=0.1, stop=None)
-    return result["choices"][0]["text"].strip()
+    return llama_complete(prompt, max_tokens=len(text) + 256, temperature=0.1)
 
 
 def format_text(text):
-    llm = load_model()
     prompt = (
         "Classify the following legal dictation into sections. Only include sections that are present. "
         "Use these exact headers:\n"
@@ -75,5 +49,4 @@ def format_text(text):
         "If the entire content is one type, use just that single header.\n\n"
         f"{text}"
     )
-    result = llm.create_completion(prompt, max_tokens=len(text) + 512, temperature=0.2, stop=None)
-    return result["choices"][0]["text"].strip()
+    return llama_complete(prompt, max_tokens=len(text) + 512, temperature=0.2)

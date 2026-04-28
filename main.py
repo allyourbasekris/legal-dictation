@@ -9,8 +9,9 @@ from datetime import datetime
 
 from src.transcriber import Transcriber
 from src import corrector
+from src.downloader import _download_progress
 from src.formatter import build_docx, save_docx
-from src.config import OUTPUT_DIR
+from src.config import OUTPUT_DIR, LLAMA_MODEL_PATH, LLAMA_BINARY_PATH
 
 
 class LegalDictationApp:
@@ -82,15 +83,23 @@ class LegalDictationApp:
         self.root.bind("<Control-s>", lambda e: self._save_docx())
 
     def _check_models(self):
-        from src.corrector import LLAMA_PATH
-        if not LLAMA_PATH.exists():
-            self.status_var.set("Downloading LLM model (1 GB)...")
-            self.start_btn.config(state=tk.DISABLED)
+        self.start_btn.config(state=tk.DISABLED)
+        if not LLAMA_BINARY_PATH.exists():
+            self.status_var.set(f"llama-cli not found. Run setup.bat to download it.")
+            return
+        if not LLAMA_MODEL_PATH.exists():
+            self.status_var.set("Downloading LLM model (1 GB) on first use...")
             threading.Thread(target=self._download_llm, daemon=True).start()
+        else:
+            self.status_var.set("Ready")
 
     def _download_llm(self):
         try:
-            corrector.download_model(callback=lambda p: self.root.after(0, lambda: self.status_var.set(f"Downloading LLM: {p:.0%}")))
+            _download_progress(
+                "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+                LLAMA_MODEL_PATH,
+                callback=lambda p: self.root.after(0, lambda: self.status_var.set(f"Downloading LLM: {p:.0%}"))
+            )
             self.root.after(0, lambda: self.status_var.set("Ready"))
             self.root.after(0, lambda: self.start_btn.config(state=tk.NORMAL if self.audio_path else tk.DISABLED))
         except Exception as e:
