@@ -1,5 +1,4 @@
-import os, subprocess, logging, tempfile, uuid, re
-from pathlib import Path
+import os, subprocess, logging, re
 from src.config import LLAMA_BINARY_PATH, LLAMA_MODEL_PATH
 
 QWEN_SYSTEM = (
@@ -26,19 +25,20 @@ def _build_prompt(system, user_text):
     )
 
 
-def _strip_banner(text):
-    """Remove llama-cli's banner, prompt echo, and trailing stats from output."""
-    # Find the last "> " prompt marker — everything before it is banner/echo
-    idx = text.rfind("> ")
-    if idx != -1:
-        text = text[idx + 2:].lstrip("\n")
+def _strip_output(text):
+    """Strip llama-cli banner, prompt echo, and trailing stats from output."""
+    # Split on "> " which is the interactive prompt marker.
+    # Output before last "> " is banner + prompt echo.
+    # Output after last "> " is generated text + trailing stats.
+    parts = text.split("> ")
+    if len(parts) > 1:
+        text = parts[-1]
 
-    # Strip trailing lines starting with common metadata markers
-    text = re.sub(
-        r'\n(?:\[ Prompt: .*|common_memory_breakdown.*|Exiting\.\.\.|\s*$)',
-        '',
-        text,
-    )
+    # Strip trailing metadata lines
+    text = re.sub(r'\n\[ Prompt: .*', '', text)
+    text = re.sub(r'\ncommon_memory_breakdown.*', '', text)
+    text = re.sub(r'\nExiting\.\.\..*', '', text)
+    text = re.sub(r'\n\[.*memory breakdown.*', '', text)
 
     # Strip special tokens
     for token in ["<|im_end|>", "<|endoftext|>"]:
@@ -60,32 +60,25 @@ def llama_complete(prompt, max_tokens=1024, temperature=0.1):
     log = logging.getLogger("legal-dictation")
     log.info(f"LLM input prompt len={len(prompt)} max_tokens={max_tokens}")
 
-    # Write prompt to temp file, use --file to avoid shell quoting
-    prompt_file = Path(tempfile.gettempdir()) / f"llama_prompt_{uuid.uuid4().hex}.txt"
-    prompt_file.write_text(prompt, encoding="utf-8")
-
+    # subprocess.run with a list passes args via CreateProcess directly,
+    # bypassing cmd.exe, so -p with special chars works fine.
     cmd = [
         binary, "-m", model,
-        "--file", str(prompt_file),
+        "-p", prompt,
         "-n", str(max_tokens), "--temp", str(temperature),
         "--no-display-prompt", "--single-turn",
         "-c", "4096",
         "--threads", str(os.cpu_count() or 4),
     ]
 
-    # Close stdin immediately so llama-cli exits after processing the file
-    result = subprocess.run(cmd, input="", capture_output=True, text=True, timeout=1200)
-
-    try:
-        prompt_file.unlink()
-    except OSError:
-        pass
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
 
     if result.returncode != 0:
         raise RuntimeError(f"llama-cli error: {result.stderr.strip()[:500]}")
 
-    full = _strip_banner(result.stdout)
-    log.info(f"Output: {len(full)} chars")
+    log.info(f"Raw stdout: {len(result.stdout)} chars")
+    full = _strip_output(result.stdout)
+    log.info(f"Stripped: {len(full)} chars")
     return full
 
 
