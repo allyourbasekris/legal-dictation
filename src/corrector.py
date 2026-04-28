@@ -57,12 +57,31 @@ def llama_complete(prompt, max_tokens=1024, temperature=0.1):
         raise RuntimeError(f"llama-cli error: {err}")
 
     full = result.stdout
-    log.info(f"LLM output length: {len(full)} chars")
+    log.info(f"Raw stdout length: {len(full)} chars")
 
+    # Strip everything up to and including the last "> " prompt marker.
+    # llama-cli prints: banner, then "> ", then prompt echo, then generation, then stats.
+    idx = full.rfind("> \n")
+    if idx != -1:
+        full = full[idx + 3:]
+
+    # Strip trailing metadata like Exiting..., timings, memory dump
+    import re
+    full = re.sub(
+        r'\n(Exiting\.\.\.|\[ Prompt:|common_memory_breakdown|\[.*memory breakdown).*',
+        '',
+        full,
+        flags=re.DOTALL,
+    )
+
+    # Strip special tokens
     for token in ["<|im_end|>", "<|endoftext|>"]:
         if full.rstrip().endswith(token):
             full = full[: -len(token)].rstrip()
-    return full.strip()
+
+    full = full.strip()
+    log.info(f"Stripped output length: {len(full)} chars")
+    return full
 
 
 def correct_text(text):
