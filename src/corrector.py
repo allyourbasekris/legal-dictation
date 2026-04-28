@@ -1,4 +1,5 @@
-import os, subprocess, logging
+import os, subprocess, logging, tempfile, uuid, re
+from pathlib import Path
 from src.config import LLAMA_BINARY_PATH, LLAMA_MODEL_PATH
 
 QWEN_SYSTEM = (
@@ -25,6 +26,28 @@ def _build_prompt(system, user_text):
     )
 
 
+def _strip_banner(text):
+    """Remove llama-cli's banner, prompt echo, and trailing stats from output."""
+    # Find the last "> " prompt marker — everything before it is banner/echo
+    idx = text.rfind("> ")
+    if idx != -1:
+        text = text[idx + 2:].lstrip("\n")
+
+    # Strip trailing lines starting with common metadata markers
+    text = re.sub(
+        r'\n(?:\[ Prompt: .*|common_memory_breakdown.*|Exiting\.\.\.|\s*$)',
+        '',
+        text,
+    )
+
+    # Strip special tokens
+    for token in ["<|im_end|>", "<|endoftext|>"]:
+        if text.rstrip().endswith(token):
+            text = text[: -len(token)].rstrip()
+
+    return text.strip()
+
+
 def llama_complete(prompt, max_tokens=1024, temperature=0.1):
     binary = str(LLAMA_BINARY_PATH)
     model = str(LLAMA_MODEL_PATH)
@@ -35,60 +58,46 @@ def llama_complete(prompt, max_tokens=1024, temperature=0.1):
         raise RuntimeError(f"Model not found at {model}.")
 
     log = logging.getLogger("legal-dictation")
-    log.info(f"LLM input prompt length: {len(prompt)} chars, max_tokens={max_tokens}")
+    log.info(f"LLM input prompt len={len(prompt)} max_tokens={max_tokens}")
 
-    # -p with --single-turn prevents interactive mode and exits after generation
-    # subprocess.run passes args directly via CreateProcess, no cmd.exe shell quoting issues
+    # Write prompt to temp file, use --file to avoid shell quoting
+    prompt_file = Path(tempfile.gettempdir()) / f"llama_prompt_{uuid.uuid4().hex}.txt"
+    prompt_file.write_text(prompt, encoding="utf-8")
+
     cmd = [
         binary, "-m", model,
-        "-p", prompt,
+        "--file", str(prompt_file),
         "-n", str(max_tokens), "--temp", str(temperature),
         "--no-display-prompt", "--single-turn",
         "-c", "4096",
         "--threads", str(os.cpu_count() or 4),
     ]
 
-    log.info(f"Running llama-cli...")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
+    # Close stdin immediately so llama-cli exits after processing the file
+    result = subprocess.run(cmd, input="", capture_output=True, text=True, timeout=1200)
+
+    try:
+        prompt_file.unlink()
+    except OSError:
+        pass
 
     if result.returncode != 0:
-        err = result.stderr.strip()[:500]
-        log.error(f"llama-cli stderr: {err}")
-        raise RuntimeError(f"llama-cli error: {err}")
+        raise RuntimeError(f"llama-cli error: {result.stderr.strip()[:500]}")
 
-    full = result.stdout
-    log.info(f"Raw stdout length: {len(full)} chars")
-
-    # Strip everything up to and including the last "> " prompt marker.
-    # llama-cli prints: banner, then "> ", then prompt echo, then generation, then stats.
-    idx = full.rfind("> \n")
-    if idx != -1:
-        full = full[idx + 3:]
-
-    # Strip trailing metadata like Exiting..., timings, memory dump
-    import re
-    full = re.sub(
-        r'\n(Exiting\.\.\.|\[ Prompt:|common_memory_breakdown|\[.*memory breakdown).*',
-        '',
-        full,
-        flags=re.DOTALL,
-    )
-
-    # Strip special tokens
-    for token in ["<|im_end|>", "<|endoftext|>"]:
-        if full.rstrip().endswith(token):
-            full = full[: -len(token)].rstrip()
-
-    full = full.strip()
-    log.info(f"Stripped output length: {len(full)} chars")
+    full = _strip_banner(result.stdout)
+    log.info(f"Output: {len(full)} chars")
     return full
 
 
 def correct_text(text):
-    prompt = _build_prompt(QWEN_SYSTEM, f"Correct this text:\n\n{text}")
-    return llama_complete(prompt, max_tokens=len(text) + 256, temperature=0.1)
+    return llama_complete(
+        _build_prompt(QWEN_SYSTEM, f"Correct this text:\n\n{text}"),
+        max_tokens=len(text) + 256, temperature=0.1,
+    )
 
 
 def format_text(text):
-    prompt = _build_prompt(QWEN_FORMAT_SYSTEM, f"Format into sections:\n\n{text}")
-    return llama_complete(prompt, max_tokens=len(text) + 512, temperature=0.2)
+    return llama_complete(
+        _build_prompt(QWEN_FORMAT_SYSTEM, f"Format into sections:\n\n{text}"),
+        max_tokens=len(text) + 512, temperature=0.2,
+    )
