@@ -109,5 +109,10 @@ def build_docx(raw_text, corrected_text, formatted_text, source_file):
 def save_docx(doc, output_path):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    doc.save(str(output_path))
+    # If file is locked, try an alternative name
+    try:
+        doc.save(str(output_path))
+    except PermissionError:
+        output_path = output_path.with_stem(output_path.stem + "_new")
+        doc.save(str(output_path))
     return output_path
