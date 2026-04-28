@@ -1,7 +1,11 @@
+import os
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+import logging
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 import threading
-import os
 import platform
 import subprocess
 from pathlib import Path
