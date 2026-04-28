@@ -59,17 +59,12 @@ exit /b 1
 set CACHE_DIR=%USERPROFILE%\.cache\legal-dictation
 if not exist "%CACHE_DIR%" mkdir "%CACHE_DIR%"
 if exist "%CACHE_DIR%\llama-cli.exe" goto launch
-echo Downloading llama-cli binary (~30 MB)...
-curl -L -o "%CACHE_DIR%\llama.zip" "https://github.com/ggml-org/llama.cpp/releases/download/b4822/llama-b4822-bin-win-cuda-cu12.6-x64.zip" --progress-bar
+echo Downloading llama-cli binary (~16 MB)...
+curl -L -o "%CACHE_DIR%\llama.zip" "https://github.com/ggml-org/llama.cpp/releases/download/b8953/llama-b8953-bin-win-cpu-x64.zip" --progress-bar
 if %errorlevel% neq 0 goto download_llama_fail
 echo Extracting...
-powershell -Command "try { Expand-Archive -Path '%CACHE_DIR%\\llama.zip' -DestinationPath '%CACHE_DIR%' -Force } catch { exit 1 }" >nul
+python extract_llama.py "%CACHE_DIR%\llama.zip" "%CACHE_DIR%"
 if %errorlevel% neq 0 goto extract_llama_fail
-if exist "%CACHE_DIR%\build\bin\Release\llama-cli.exe" move /Y "%CACHE_DIR%\build\bin\Release\llama-cli.exe" "%CACHE_DIR%\llama-cli.exe" >nul
-if not exist "%CACHE_DIR%\llama-cli.exe" dir /s /b "%CACHE_DIR%\llama-cli.exe" 2>nul > "%TEMP%\llama_find.txt"
-if not exist "%CACHE_DIR%\llama-cli.exe" for /f "delims=" %%f in ('type "%TEMP%\llama_find.txt" 2^>nul') do move /Y "%%f" "%CACHE_DIR%\llama-cli.exe" >nul 2>&1
-if exist "%TEMP%\llama_find.txt" del "%TEMP%\llama_find.txt" >nul 2>&1
-if exist "%CACHE_DIR%\build" rmdir /s /q "%CACHE_DIR%\build" >nul 2>&1
 if exist "%CACHE_DIR%\llama.zip" del "%CACHE_DIR%\llama.zip" >nul
 if not exist "%CACHE_DIR%\llama-cli.exe" goto extract_llama_fail
 echo llama-cli ready.
