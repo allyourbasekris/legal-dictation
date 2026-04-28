@@ -1,5 +1,4 @@
-import os, subprocess, logging, uuid, tempfile
-from pathlib import Path
+import os, subprocess, logging
 from src.config import LLAMA_BINARY_PATH, LLAMA_MODEL_PATH
 
 QWEN_SYSTEM = (
@@ -31,32 +30,26 @@ def llama_complete(prompt, max_tokens=1024, temperature=0.1):
     model = str(LLAMA_MODEL_PATH)
 
     if not os.path.exists(binary):
-        raise RuntimeError(f"llama-cli not found at {binary}. Run setup.bat.")
+        raise RuntimeError(f"llama-cli not found at {binary}.")
     if not os.path.exists(model):
         raise RuntimeError(f"Model not found at {model}.")
 
     log = logging.getLogger("legal-dictation")
     log.info(f"LLM input prompt length: {len(prompt)} chars, max_tokens={max_tokens}")
 
-    prompt_file = Path(tempfile.gettempdir()) / f"llama_prompt_{uuid.uuid4().hex}.txt"
-    prompt_file.write_text(prompt, encoding="utf-8")
-
+    # -p with --single-turn prevents interactive mode and exits after generation
+    # subprocess.run passes args directly via CreateProcess, no cmd.exe shell quoting issues
     cmd = [
         binary, "-m", model,
-        "-f", str(prompt_file),
+        "-p", prompt,
         "-n", str(max_tokens), "--temp", str(temperature),
-        "--no-display-prompt", "-c", "4096",
+        "--no-display-prompt", "--single-turn",
+        "-c", "4096",
         "--threads", str(os.cpu_count() or 4),
     ]
 
-    log.info(f"Running: {binary}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-
-    # Cleanup prompt file
-    try:
-        prompt_file.unlink()
-    except OSError:
-        pass
+    log.info(f"Running llama-cli...")
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
 
     if result.returncode != 0:
         err = result.stderr.strip()[:500]
